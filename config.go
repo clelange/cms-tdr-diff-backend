@@ -14,6 +14,7 @@ type Configuration struct {
 	gitlabToken           string
 	triggerToken          string
 	jwtSecret             []byte
+	apiToken              string
 	gitlabURL             string
 	gitlabProject         int
 	debug                 bool
@@ -88,6 +89,13 @@ func validateAndSetConfig(v1 *viper.Viper) (Configuration, error) {
 	}
 	configuration.jwtSecret = []byte(jwtSecretString)
 
+	configuration.apiToken = v1.GetString("apiToken")
+	if configuration.apiToken == "" {
+		errorMessage := "apiToken cannot be empty."
+		err := errors.New(errorMessage)
+		return configuration, err
+	}
+
 	fmt.Printf("Reading config for port = %d\n", configuration.port)
 	fmt.Printf("Reading config for frontendOrigin = %s\n", configuration.frontendOrigin)
 	fmt.Printf("Reading config for gitlabURL = %s\n", configuration.gitlabURL)
@@ -99,5 +107,6 @@ func validateAndSetConfig(v1 *viper.Viper) (Configuration, error) {
 	fmt.Printf("Reading config for updateIntervalSeconds = %d\n", configuration.updateIntervalSeconds)
 	// fmt.Printf("Reading config for gitlabToken = %s\n", configuration.gitlabToken)
 	// fmt.Printf("Reading config for triggerToken = %s\n", configuration.triggerToken)
+	// fmt.Printf("Reading config for apiToken = %s\n", configuration.apiToken)
 	return configuration, nil
 }

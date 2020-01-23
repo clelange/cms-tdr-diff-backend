@@ -308,10 +308,11 @@ func main() {
 		c.JSON(200, gin.H{"lastUpdated": lastUpdated})
 	})
 
-	authMiddleware, err := getAuthMiddleware(configuration.jwtSecret)
+	// authMiddleware, err := getAuthMiddleware(configuration.jwtSecret)
 
 	authorized := r.Group("/")
-	authorized.Use(authMiddleware.MiddlewareFunc())
+	// authorized.Use(authMiddleware.MiddlewareFunc())
+	authorized.Use(tokenAuthMiddleware(configuration.apiToken))
 	{
 
 		authorized.GET("/types", func(c *gin.Context) {
