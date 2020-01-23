@@ -15,5 +15,5 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         buildargs: SNAPSHOT_TAG
-        workdir: ./services/server
+        workdir: ./
         snapshot: true
