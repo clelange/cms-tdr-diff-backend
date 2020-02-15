@@ -13,7 +13,6 @@ type Configuration struct {
 	frontendOrigin        string
 	gitlabToken           string
 	triggerToken          string
-	jwtSecret             []byte
 	apiToken              string
 	gitlabURL             string
 	gitlabProject         int
@@ -80,14 +79,6 @@ func validateAndSetConfig(v1 *viper.Viper) (Configuration, error) {
 		err := errors.New(errorMessage)
 		return configuration, err
 	}
-
-	var jwtSecretString = v1.GetString("jwtSecret")
-	if jwtSecretString == "" {
-		errorMessage := "jwtSecret cannot be empty."
-		err := errors.New(errorMessage)
-		return configuration, err
-	}
-	configuration.jwtSecret = []byte(jwtSecretString)
 
 	configuration.apiToken = v1.GetString("apiToken")
 	if configuration.apiToken == "" {
