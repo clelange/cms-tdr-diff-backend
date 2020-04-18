@@ -3,7 +3,9 @@ ADD . /app
 WORKDIR /app
 ENV GO111MODULE=on
 RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o /main .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags "-X main.sha1ver=$(git rev-parse HEAD) -X main.buildTime=$(date +'%Y-%m-%d_%T')" \
+    -a -o /main .
 
 # final stage
 FROM alpine:latest

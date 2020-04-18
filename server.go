@@ -3,15 +3,35 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xanzy/go-gitlab"
 )
+
+var (
+	sha1ver   string // sha1 revision used to build the program
+	buildTime string // when the executable was built
+)
+
+var (
+	flgVersion bool
+)
+
+func parseCmdLineFlags() {
+	flag.BoolVar(&flgVersion, "version", false, "if true, print version and exit")
+	flag.Parse()
+	if flgVersion {
+		fmt.Printf("Build on %s from sha1 %s\n", buildTime, sha1ver)
+		os.Exit(0)
+	}
+}
 
 type tdrTypes struct {
 	Names []string `json:"names"`
@@ -243,6 +263,8 @@ func ping(c *gin.Context) {
 
 func main() {
 
+	parseCmdLineFlags()
+
 	v1, err := readConfig()
 	if err != nil {
 		log.Panicln("Configuration error", err)
@@ -254,8 +276,10 @@ func main() {
 		log.Panicln(err)
 	}
 
-	gl := gitlab.NewClient(nil, configuration.gitlabToken)
-	gl.SetBaseURL(configuration.gitlabURL)
+	gl, err := gitlab.NewClient(configuration.gitlabToken, gitlab.WithBaseURL(configuration.gitlabURL))
+	if err != nil {
+		log.Panicln(err)
+	}
 
 	pipelineProject, _, err := gl.Projects.GetProject("clange/tdr-diff", nil)
 	if err != nil {
