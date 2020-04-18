@@ -2,4 +2,4 @@ dist/
 config/
 .env
 config.yaml
-tdr-diff-backend-go
+server
