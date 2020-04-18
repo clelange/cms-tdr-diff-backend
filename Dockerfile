@@ -1,4 +1,4 @@
-FROM golang:1.13.4-buster AS builder
+FROM golang:1.14.2-buster AS builder
 ADD . /app
 WORKDIR /app
 ENV GO111MODULE=on
