@@ -4,7 +4,7 @@ WORKDIR /app
 ENV GO111MODULE=on
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags "-X main.sha1ver=$(git rev-parse HEAD) -X main.buildTime=$(date +'%Y-%m-%d_%T')" \
+    -ldflags "-X main.sha1ver=$(git rev-parse --short HEAD) -X main.buildTime=$(date +'%Y%m%d%H%M%S')" \
     -a -o /main .
 
 # final stage

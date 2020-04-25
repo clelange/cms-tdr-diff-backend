@@ -9,7 +9,7 @@ import (
 
 // Configuration structure
 type Configuration struct {
-	port                  int
+	address               string
 	frontendOrigin        string
 	gitlabToken           string
 	triggerToken          string
@@ -17,7 +17,6 @@ type Configuration struct {
 	gitlabURL             string
 	gitlabProject         int
 	debug                 bool
-	prefetchGroups        bool
 	groupIds              []string
 	commitHistoryDays     int
 	updateIntervalSeconds int
@@ -29,16 +28,16 @@ func readConfig() (*viper.Viper, error) {
 	v.SetEnvPrefix("viper") // will be uppercased automatically
 	// v.BindEnv("gitlabToken")
 	// v.BindEnv("triggerToken")
-	v.SetDefault("port", 8000)
+	v.SetDefault("address", ":8080")
 	v.SetDefault("frontendOrigin", "http://localhost:3000")
 	v.SetDefault("gitlabURL", "https://gitlab.cern.ch/api/v4")
 	v.SetDefault("gitlabProject", 56283)
-	v.SetDefault("debug", true)
-	v.SetDefault("prefetchGroups", true)
+	v.SetDefault("debug", false)
 	v.SetDefault("commitHistoryDays", 90)
 	v.SetDefault("updateIntervalSeconds", 300)
 	v.SetDefault("groupIds", []string{
 		"papers", "notes", "reports",
+		// "reports",
 	})
 	v.SetConfigName("config")
 	v.AddConfigPath("config")
@@ -56,12 +55,11 @@ func readConfig() (*viper.Viper, error) {
 
 func validateAndSetConfig(v1 *viper.Viper) (Configuration, error) {
 	var configuration Configuration
-	configuration.port = v1.GetInt("port")
+	configuration.address = v1.GetString("address")
 	configuration.frontendOrigin = v1.GetString("frontendOrigin")
 	configuration.gitlabURL = v1.GetString("gitlabURL")
 	configuration.gitlabProject = v1.GetInt("gitlabProject")
 	configuration.debug = v1.GetBool("debug")
-	configuration.prefetchGroups = v1.GetBool("prefetchGroups")
 	configuration.groupIds = v1.GetStringSlice("groupIds")
 	configuration.commitHistoryDays = v1.GetInt("commitHistoryDays")
 	configuration.updateIntervalSeconds = v1.GetInt("updateIntervalSeconds")
@@ -87,12 +85,11 @@ func validateAndSetConfig(v1 *viper.Viper) (Configuration, error) {
 		return configuration, err
 	}
 
-	fmt.Printf("Reading config for port = %d\n", configuration.port)
+	fmt.Printf("Reading config for address = %s\n", configuration.address)
 	fmt.Printf("Reading config for frontendOrigin = %s\n", configuration.frontendOrigin)
 	fmt.Printf("Reading config for gitlabURL = %s\n", configuration.gitlabURL)
 	fmt.Printf("Reading config for gitlabProject = %d\n", configuration.gitlabProject)
 	fmt.Printf("Reading config for debug = %t\n", configuration.debug)
-	fmt.Printf("Reading config for prefetchGroups = %t\n", configuration.prefetchGroups)
 	fmt.Printf("Reading config for groupIds = %#v\n", configuration.groupIds)
 	fmt.Printf("Reading config for commitHistoryDays = %d\n", configuration.commitHistoryDays)
 	fmt.Printf("Reading config for updateIntervalSeconds = %d\n", configuration.updateIntervalSeconds)
