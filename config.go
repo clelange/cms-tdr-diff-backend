@@ -28,13 +28,13 @@ func readConfig() (*viper.Viper, error) {
 	v.SetEnvPrefix("viper") // will be uppercased automatically
 	// v.BindEnv("gitlabToken")
 	// v.BindEnv("triggerToken")
-	v.SetDefault("address", ":8080")
+	v.SetDefault("address", ":8000")
 	v.SetDefault("frontendOrigin", "http://localhost:3000")
 	v.SetDefault("gitlabURL", "https://gitlab.cern.ch/api/v4")
 	v.SetDefault("gitlabProject", 56283)
 	v.SetDefault("debug", false)
 	v.SetDefault("commitHistoryDays", 90)
-	v.SetDefault("updateIntervalSeconds", 300)
+	v.SetDefault("updateIntervalSeconds", 600)
 	v.SetDefault("groupIds", []string{
 		"papers", "notes", "reports",
 		// "reports",
