@@ -13,6 +13,6 @@ func (s *server) newRouter(apiToken string, frontendOrigin string) *mux.Router {
 	r.HandleFunc("/projects/{id}", withCORS(withAPIKey(s.handleProjects(), apiToken), frontendOrigin))
 	r.HandleFunc("/commits/{group}/{id}", withCORS(withAPIKey(s.handleCommits(), apiToken), frontendOrigin))
 	r.HandleFunc("/status/pipeline/{id}", withCORS(withAPIKey(s.handlePipelineStatus(), apiToken), frontendOrigin))
-	r.HandleFunc("/trigger", withCORS(withAPIKey(s.handlePipelineStatus(), apiToken), frontendOrigin)).Methods("POST")
+	r.HandleFunc("/trigger", withCORS(withAPIKey(s.handleTrigger(), apiToken), frontendOrigin)).Methods("POST")
 	return r
 }
