@@ -4,12 +4,10 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/xanzy/go-gitlab"
 )
 
 type gitlabCommitList struct {
@@ -49,8 +47,11 @@ func (s *server) handleProjects() http.HandlerFunc {
 		log.Println(groupID)
 		for key := range groupIDs {
 			if key == groupID {
+				projectsMu.RLock()
+				projects := append([]gitlabProjectList(nil), allProjects[groupID]...)
+				projectsMu.RUnlock()
 				projectResponse := response{
-					Data: allProjects[groupID],
+					Data: projects,
 				}
 				respond(w, r, http.StatusOK, projectResponse)
 				return
@@ -116,43 +117,63 @@ func (s *server) handleCommits() http.HandlerFunc {
 
 func (s *server) handlePipelineStatus() http.HandlerFunc {
 	type response struct {
-		JobStatus *gitlab.Job `json:"job_status"`
+		JobStatus *diffJobStatus `json:"job_status"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
-		pipelineIDString, ok := vars["id"]
+		jobID, ok := vars["id"]
 		if !ok {
 			respondErr(w, r, http.StatusBadRequest, ok)
 			return
 		}
-		log.Println(pipelineIDString)
-		pipelineID, err := strconv.Atoi(pipelineIDString)
+		log.Println(jobID)
+		jobStatus, err := s.getDiffJob(r.Context(), jobID)
 		if err != nil {
-			respondErr(w, r, http.StatusBadRequest, err)
-			return
-		}
-		pipelineJobs, _, err := s.gl.Jobs.ListPipelineJobs(pipelineProjectID, pipelineID, nil)
-		if err != nil {
-			respondErr(w, r, http.StatusBadRequest, err)
-			return
-		}
-		jobID := pipelineJobs[0].ID
-		job, _, err := s.gl.Jobs.GetJob(pipelineProjectID, jobID, nil)
-		if err != nil {
+			if isNotFound(err) {
+				respondErr(w, r, http.StatusNotFound, err)
+				return
+			}
 			respondErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 		pipelineStatusResponse := response{
-			JobStatus: job,
+			JobStatus: jobStatus,
 		}
 		respond(w, r, http.StatusOK, pipelineStatusResponse)
 	}
 }
 
+func (s *server) handleJobs() http.HandlerFunc {
+	type response struct {
+		Jobs []diffJobStatus `json:"jobs"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		jobs, err := s.listDiffJobs(r.Context())
+		if err != nil {
+			respondErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		respond(w, r, http.StatusOK, response{Jobs: jobs})
+	}
+}
+
+func (s *server) handleJobDownload() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		jobID, ok := vars["id"]
+		if !ok {
+			respondErr(w, r, http.StatusBadRequest, ok)
+			return
+		}
+		s.serveJobDownload(w, r, jobID)
+	}
+}
+
 func (s *server) handleTrigger() http.HandlerFunc {
 	type response struct {
-		Status     string `json:"status"`
-		PipelineID int    `json:"pipeline_id"`
+		Status string         `json:"status"`
+		JobID  string         `json:"job_id"`
+		Job    *diffJobStatus `json:"job"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		var triggerObject triggerStruct
@@ -160,27 +181,15 @@ func (s *server) handleTrigger() http.HandlerFunc {
 			respondErr(w, r, http.StatusBadRequest, err)
 			return
 		}
-		var variables = make(map[string]string)
-		variables["REPO_PROJECT"] = triggerObject.Project
-		variables["REPO_GROUP"] = triggerObject.Group
-		variables["GIT_SHA1"] = triggerObject.SHA1
-		variables["GIT_SHA2"] = triggerObject.SHA2
-
-		referenceBranch := "master"
-		pipelineOptions := &gitlab.RunPipelineTriggerOptions{
-			Ref:       &referenceBranch,
-			Token:     &s.configuration.triggerToken,
-			Variables: variables,
-		}
-
-		pipeline, _, err := s.gl.PipelineTriggers.RunPipelineTrigger(pipelineProjectID, pipelineOptions)
+		jobStatus, err := s.createDiffJob(r.Context(), triggerObject)
 		if err != nil {
 			respondErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 		triggerReponse := response{
-			Status:     "Pipeline triggered successfully!",
-			PipelineID: pipeline.ID,
+			Status: "Diff job created successfully!",
+			JobID:  jobStatus.ID,
+			Job:    jobStatus,
 		}
 		respond(w, r, http.StatusOK, triggerReponse)
 	}

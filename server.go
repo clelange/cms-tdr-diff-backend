@@ -7,9 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
-	"github.com/xanzy/go-gitlab"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
+	"k8s.io/client-go/kubernetes"
 )
 
 var (
@@ -26,11 +29,11 @@ type tdrTypes struct {
 }
 
 var (
-	lastUpdated       time.Time                      // when projects have last been updated
-	pipelineProjectID int                            // needed for interacting with GitLab API
-	allProjects       map[string][]gitlabProjectList // all GitLab projects
-	projTypes         *tdrTypes                      // all types available in tdr repository
-	groupIDs          map[string]int                 // all available group IDs
+	lastUpdated time.Time                      // when projects have last been updated
+	allProjects map[string][]gitlabProjectList // all GitLab projects
+	projTypes   *tdrTypes                      // all types available in tdr repository
+	groupIDs    map[string]int64               // all available group IDs
+	projectsMu  sync.RWMutex
 )
 
 func parseCmdLineFlags() {
@@ -44,6 +47,7 @@ func parseCmdLineFlags() {
 
 type server struct {
 	gl            *gitlab.Client
+	kube          kubernetes.Interface
 	configuration *Configuration
 }
 
@@ -71,13 +75,12 @@ func main() {
 		gl:            gl,
 		configuration: &configuration,
 	}
-
-	pipelineProject, _, err := gl.Projects.GetProject("clange/tdr-diff", nil)
+	kube, err := newKubernetesClient()
 	if err != nil {
-		log.Print(err)
+		log.Printf("Kubernetes client unavailable: %v", err)
+	} else {
+		s.kube = kube
 	}
-	pipelineProjectID = pipelineProject.ID
-	log.Println("Pipeline project ID:", pipelineProjectID)
 
 	groupIDs, err = validateSubgroups(16284, gl, configuration) // this is the tdr group
 	if err != nil {
@@ -85,22 +88,20 @@ func main() {
 	}
 	log.Println("Group IDs:", groupIDs)
 
-	allProjects, err = updateProjects(groupIDs, gl)
-	lastUpdated = time.Now()
-	ticker := time.NewTicker(time.Duration(configuration.updateIntervalSeconds) * time.Second)
-	go func() {
-		for range ticker.C {
-			log.Println("updating...")
-			tempAllProjects, err := updateProjects(groupIDs, gl)
-			if err != nil {
-				log.Println("Updating projects failed", err)
-				continue
-			}
-			lastUpdated = time.Now()
-			allProjects = tempAllProjects
-			log.Println("Done updating at", lastUpdated)
+	allProjects = make(map[string][]gitlabProjectList)
+	refreshProjects := func() {
+		log.Println("updating projects...")
+		tempAllProjects, err := updateProjects(groupIDs, gl)
+		if err != nil {
+			log.Println("Updating projects failed", err)
+			return
 		}
-	}()
+		projectsMu.Lock()
+		lastUpdated = time.Now()
+		allProjects = tempAllProjects
+		projectsMu.Unlock()
+		log.Println("Done updating at", lastUpdated)
+	}
 
 	types := make([]string, 0, len(configuration.groupIds))
 	for _, key := range configuration.groupIds {
@@ -130,10 +131,18 @@ func main() {
 		}
 	}()
 
+	ticker := time.NewTicker(time.Duration(configuration.updateIntervalSeconds) * time.Second)
+	defer ticker.Stop()
+	go func() {
+		refreshProjects()
+		for range ticker.C {
+			refreshProjects()
+		}
+	}()
+
 	c := make(chan os.Signal, 1)
-	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
-	// SIGKILL, SIGQUIT or SIGTERM (Ctrl+/) will not be caught.
-	signal.Notify(c, os.Interrupt)
+	// We'll accept graceful shutdowns when quit via SIGINT or SIGTERM.
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	// Block until we receive our signal.
 	<-c

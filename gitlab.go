@@ -5,11 +5,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/xanzy/go-gitlab"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 
 type gitlabProjectList struct {
-	ID             int        `json:"id"`
+	ID             int64      `json:"id"`
 	Name           string     `json:"name"`
 	WebURL         string     `json:"web_url"`
 	LastActivityAt *time.Time `json:"last_activity_at"`
@@ -32,9 +32,9 @@ func (s *server) getProjectInfo(projectGroup string, projectID string) (gitlabPr
 	return projectInfo, response, err
 }
 
-func (s *server) getCommits(projectID int) ([]gitlabCommitList, error) {
-	maxPages := 100
-	currentPage := 1
+func (s *server) getCommits(projectID int64) ([]gitlabCommitList, error) {
+	maxPages := int64(100)
+	currentPage := int64(1)
 	var commitList []gitlabCommitList
 	for currentPage <= maxPages {
 		var listQueryOptions = &gitlab.ListCommitsOptions{
@@ -67,7 +67,7 @@ func (s *server) getCommits(projectID int) ([]gitlabCommitList, error) {
 	return commitList, nil
 }
 
-func (s *server) getTags(projectID int) ([]*gitlab.Tag, error) {
+func (s *server) getTags(projectID int64) ([]*gitlab.Tag, error) {
 
 	// var tagList []gitlabTagList
 	var listQueryOptions = &gitlab.ListTagsOptions{
@@ -82,13 +82,13 @@ func (s *server) getTags(projectID int) ([]*gitlab.Tag, error) {
 }
 
 // check that provided subgroups exist in project
-func validateSubgroups(groupID int, gl *gitlab.Client, configuration Configuration) (map[string]int, error) {
-	groups, _, err := gl.Groups.ListSubgroups(groupID, nil)
+func validateSubgroups(groupID int, gl *gitlab.Client, configuration Configuration) (map[string]int64, error) {
+	groups, _, err := gl.Groups.ListSubGroups(groupID, nil)
 	if err != nil {
 		log.Print(err)
 	}
 
-	groupIDMap := make(map[string]int)
+	groupIDMap := make(map[string]int64)
 	for _, n := range configuration.groupIds {
 		found := false
 		for _, group := range groups {
@@ -106,9 +106,9 @@ func validateSubgroups(groupID int, gl *gitlab.Client, configuration Configurati
 }
 
 // get all projects for a given subgroup
-func getProjects(groupID int, gl *gitlab.Client) ([]gitlabProjectList, error) {
-	maxPages := 100
-	currentPage := 1
+func getProjects(groupID int64, gl *gitlab.Client) ([]gitlabProjectList, error) {
+	maxPages := int64(100)
+	currentPage := int64(1)
 	var projectList []gitlabProjectList
 	for currentPage <= maxPages {
 		var listQueryOptions = &gitlab.ListGroupProjectsOptions{
@@ -139,7 +139,7 @@ func getProjects(groupID int, gl *gitlab.Client) ([]gitlabProjectList, error) {
 	return projectList, nil
 }
 
-func updateProjects(groupIDs map[string]int, gl *gitlab.Client) (map[string][]gitlabProjectList, error) {
+func updateProjects(groupIDs map[string]int64, gl *gitlab.Client) (map[string][]gitlabProjectList, error) {
 	allProjects := make(map[string][]gitlabProjectList)
 	var err error
 	for value, key := range groupIDs {

@@ -23,8 +23,11 @@ func (s *server) handleLastUpdated() http.HandlerFunc {
 		LastUpdated time.Time `json:"lastUpdated"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		projectsMu.RLock()
+		updated := lastUpdated
+		projectsMu.RUnlock()
 		lastUpdatedResponse := response{
-			LastUpdated: lastUpdated,
+			LastUpdated: updated,
 		}
 		respond(w, r, http.StatusOK, lastUpdatedResponse)
 	}

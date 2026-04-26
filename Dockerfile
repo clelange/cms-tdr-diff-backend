@@ -1,18 +1,21 @@
-FROM golang:1.14.2-buster AS builder
-ADD . /app
+FROM golang:1.26-alpine AS builder
+
+RUN apk --no-cache add git
+
 WORKDIR /app
-ENV GO111MODULE=on
+COPY go.mod go.sum ./
 RUN go mod download
+COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags "-X main.sha1ver=$(git rev-parse --short HEAD) -X main.buildTime=$(date +'%Y%m%d%H%M%S')" \
-    -a -o /main .
+    -trimpath -a -o /main .
 
 # final stage
-FROM alpine:latest
+FROM alpine:3.22
 ARG SNAPSHOT_TAG="local"
 ENV BUILD_HASH=$SNAPSHOT_TAG
 RUN apk --no-cache add ca-certificates
-COPY --from=builder /main ./
-RUN chmod +x ./main
-ENTRYPOINT ["./main"]
+WORKDIR /app
+COPY --from=builder /main ./main
+ENTRYPOINT ["/app/main"]
 EXPOSE 8000

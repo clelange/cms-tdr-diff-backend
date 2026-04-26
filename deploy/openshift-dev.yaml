@@ -1,0 +1,288 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tdr-diff-output
+  namespace: cms-tdr-diff-dev
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: cephfs-ah2-ssd-no-backup
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: tdr-diff-backend-go
+  namespace: cms-tdr-diff-dev
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: tdr-diff-client
+  namespace: cms-tdr-diff-dev
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: tdr-diff
+  namespace: cms-tdr-diff-dev
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tdr-diff-backend
+  namespace: cms-tdr-diff-dev
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tdr-diff-runner
+  namespace: cms-tdr-diff-dev
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tdr-diff-backend
+  namespace: cms-tdr-diff-dev
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tdr-diff-backend
+  namespace: cms-tdr-diff-dev
+subjects:
+  - kind: ServiceAccount
+    name: tdr-diff-backend
+    namespace: cms-tdr-diff-dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tdr-diff-backend
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cms-tdr-diff-backend-configmap
+  namespace: cms-tdr-diff-dev
+data:
+  ADDRESS: ":8000"
+  FRONTENDORIGIN: "https://cms-tdr-diff-dev.web.cern.ch"
+  GITLABURL: "https://gitlab.cern.ch/api/v4"
+  GROUPIDS: "papers notes"
+  COMMITHISTORYDAYS: "90"
+  UPDATEINTERVALSECONDS: "600"
+  NAMESPACE: "cms-tdr-diff-dev"
+  DIFFIMAGE: "registry.paas.cern.ch/cms-tdr-diff-dev/tdr-diff:feature-openshift-diff-jobs"
+  DIFFOUTPUTPVC: "tdr-diff-output"
+  DIFFOUTPUTPATH: "/data/diffs"
+  DIFFOUTPUTMOUNTPATH: "/outputs"
+  DIFFWORKSPACEMOUNTPATH: "/workspace"
+  DIFFSECRETNAME: "cms-tdr-diff-secrets"
+  DIFFJOBSERVICEACCOUNT: "tdr-diff-runner"
+  DIFFJOBTTLSECONDS: "864000"
+  DIFFJOBACTIVEDEADLINESECS: "21600"
+  DIFFJOBBACKOFFLIMIT: "0"
+  DIFFJOBCPUREQUEST: "500m"
+  DIFFJOBCPULIMIT: "1"
+  DIFFJOBMEMORYREQUEST: "1Gi"
+  DIFFJOBMEMORYLIMIT: "2Gi"
+  DIFFOUTPUTRETENTIONDAYS: "10"
+  DIFFMAXCONCURRENTJOBS: "2"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cms-tdr-diff-frontend-configmap
+  namespace: cms-tdr-diff-dev
+data:
+  BACKEND_URL: "http://tdr-diff-backend-go:8000"
+  BUILD_HASH: "feature-vue3-openshift-jobs"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tdr-diff-backend-go
+  namespace: cms-tdr-diff-dev
+  labels:
+    app: tdr-diff-backend-go
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tdr-diff-backend-go
+      deploymentconfig: tdr-diff-backend-go
+  template:
+    metadata:
+      labels:
+        app: tdr-diff-backend-go
+        deploymentconfig: tdr-diff-backend-go
+    spec:
+      serviceAccountName: tdr-diff-backend
+      containers:
+        - name: tdr-diff-backend-go
+          image: registry.paas.cern.ch/cms-tdr-diff-dev/tdr-diff-backend-go:feature-openshift-diff-jobs
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          envFrom:
+            - configMapRef:
+                name: cms-tdr-diff-backend-configmap
+              prefix: VIPER_
+            - secretRef:
+                name: cms-tdr-diff-secrets
+              prefix: VIPER_
+          volumeMounts:
+            - name: output
+              mountPath: /data/diffs
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8000
+            initialDelaySeconds: 5
+            timeoutSeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8000
+            initialDelaySeconds: 30
+            timeoutSeconds: 2
+            periodSeconds: 20
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: 8000
+            failureThreshold: 30
+            periodSeconds: 5
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: tdr-diff-output
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tdr-diff-client
+  namespace: cms-tdr-diff-dev
+  labels:
+    app: tdr-diff-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tdr-diff-client
+      deploymentconfig: tdr-diff-client
+  template:
+    metadata:
+      labels:
+        app: tdr-diff-client
+        deploymentconfig: tdr-diff-client
+    spec:
+      containers:
+        - name: tdr-diff-client
+          image: registry.paas.cern.ch/cms-tdr-diff-dev/tdr-diff-client:feature-vue3-openshift-jobs
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NUXT_BACKEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cms-tdr-diff-frontend-configmap
+                  key: BACKEND_URL
+            - name: NUXT_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cms-tdr-diff-api-secret
+                  key: API_TOKEN
+            - name: NUXT_PUBLIC_BUILD_HASH
+              valueFrom:
+                configMapKeyRef:
+                  name: cms-tdr-diff-frontend-configmap
+                  key: BUILD_HASH
+          envFrom:
+            - configMapRef:
+                name: cms-tdr-diff-frontend-configmap
+            - secretRef:
+                name: cms-tdr-diff-api-secret
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tdr-diff-output-cleanup
+  namespace: cms-tdr-diff-dev
+spec:
+  schedule: "17 2 * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cleanup
+              image: busybox:1.37
+              command:
+                - /bin/sh
+                - -c
+                - find /outputs -mindepth 1 -maxdepth 1 -type d -mtime +9 -exec rm -rf {} +
+              volumeMounts:
+                - name: output
+                  mountPath: /outputs
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+          volumes:
+            - name: output
+              persistentVolumeClaim:
+                claimName: tdr-diff-output
